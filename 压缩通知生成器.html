@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>压缩通知生成器</title>
+<style>
+  :root{
+    --ink:#1a2230; --ink-soft:#4a5568; --line:#dde3ec; --bg:#eef1f6;
+    --panel:#fff; --accent:#2f6f6a; --accent-press:#245451; --field:#f6f8fb;
+    --tag:#eaf3f2; --warn:#b4531a; --warn-bg:#fbf0e6;
+    --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased;}
+  header{padding:22px 28px 18px;border-bottom:1px solid var(--line);background:var(--panel);}
+  header h1{margin:0;font-size:19px;letter-spacing:.5px;font-weight:650;display:flex;align-items:center;gap:10px;}
+  header h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none;}
+  header p{margin:4px 0 0 19px;font-size:12.5px;color:var(--ink-soft);}
+  .wrap{display:grid;grid-template-columns:minmax(360px,440px) 1fr;gap:0;align-items:start;min-height:calc(100vh - 78px);}
+  .form{padding:20px 22px 40px;border-right:1px solid var(--line);background:var(--panel);position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;}
+  .out{padding:20px 26px 60px;overflow:auto;}
+  .grp{margin-bottom:16px;}
+  .grp>label,.subhead{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;letter-spacing:.3px;}
+  .subhead{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#9aa3b2;margin:22px 0 10px;border-top:1px dashed var(--line);padding-top:16px;}
+  .hint{font-size:11px;color:#8a93a3;font-weight:400;margin-left:6px;}
+  input[type=text],input[type=datetime-local],input[type=date],textarea{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:var(--field);
+    font-family:var(--sans);font-size:13.5px;color:var(--ink);transition:border-color .15s,background .15s;}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent);background:#fff;}
+  textarea{resize:vertical;line-height:1.55;font-size:12.5px;}
+  #source{min-height:150px;font-family:var(--mono);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .btn{border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:9px 16px;border-radius:7px;cursor:pointer;transition:background .15s,transform .05s;}
+  .btn:hover{background:var(--accent-press);} .btn:active{transform:translateY(1px);}
+  .btn.ghost{background:#fff;color:var(--accent);}
+  .mini{font-size:11px;color:#8a93a3;margin-top:4px;}
+  .parsemsg{font-size:12px;margin-top:8px;padding:8px 10px;border-radius:6px;display:none;}
+  .parsemsg.ok{display:block;background:var(--tag);color:var(--accent);}
+  .parsemsg.err{display:block;background:var(--warn-bg);color:var(--warn);}
+  .srv-row{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;align-items:center;margin-bottom:8px;}
+  .srv-row .del{border:1px solid var(--line);background:#fff;color:#b0424c;border-radius:6px;cursor:pointer;font-size:15px;line-height:1;padding:7px 0;}
+  .srv-row .del:hover{background:#fbeef0;}
+  .srvhdr{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;font-size:10.5px;color:#9aa3b2;margin-bottom:4px;padding:0 2px;}
+  /* output */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden;box-shadow:0 1px 2px rgba(26,34,48,.04);}
+  .card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfd;}
+  .card-head .t{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:9px;}
+  .badge{font-size:10.5px;font-weight:700;letter-spacing:.6px;padding:3px 8px;border-radius:5px;background:var(--tag);color:var(--accent);}
+  .copy-btn{border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:7px;cursor:pointer;transition:background .15s,transform .05s;white-space:nowrap;}
+  .copy-btn:hover{background:var(--accent-press);} .copy-btn:active{transform:translateY(1px);}
+  .copy-btn.done{background:#eef7f0;color:#1e7a45;border-color:#bfe3cc;}
+  pre.body{margin:0;padding:16px 18px;font-family:var(--mono);font-size:12.8px;line-height:1.72;white-space:pre-wrap;word-break:break-word;color:#212b3a;}
+  .foot{padding:14px 28px 40px;font-size:11.5px;color:#8a93a3;}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr;}.form{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--line);}}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>压缩通知生成器</h1>
+  <p>粘贴交易部门原贴 → 自动解析 → 生成「对销售 (Teams)」与「对客户 (BSS)」两份通知</p>
+</header>
+
+<div class="wrap">
+  <div class="form">
+    <div class="grp">
+      <label>① 粘贴交易部门原贴 <span class="hint">中文部分即可，含「受影响服务器 / 时间 / 压缩订单时间范围」几行</span></label>
+      <textarea id="source" placeholder="例：
+…我司将于2026年08月15日（星期六）对 MT4 Live 8 服务器中2026年 08月14日前的所有历史订单进行压缩…
+
+受影响服务器：MT4 Live 8
+时间：2026.08.15（星期六) 0600 (UTC+8) 至 2026.08.16 (星期日) 1000 (UTC+8)
+压缩订单时间范围：2026年08月14日以前的所有交易订单与资金订单
+…"></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn" id="parseBtn">解析原贴</button>
+        <button class="btn ghost" id="clearBtn">清空</button>
+      </div>
+      <div class="parsemsg" id="parseMsg"></div>
+    </div>
+
+    <div class="subhead">② 核对 / 调整</div>
+
+    <div class="grp row2">
+      <div><label>品牌</label><input type="text" id="brand" value="D Prime"></div>
+      <div><label>平台</label><input type="text" id="platform" value="MT4"></div>
+    </div>
+
+    <div class="grp">
+      <div class="srvhdr"><span>服务器（受影响）</span><span>数据截止日</span><span></span></div>
+      <div id="srvList"></div>
+      <button class="btn ghost" id="addSrv" style="font-size:12px;padding:6px 12px;margin-top:2px;">+ 添加服务器</button>
+    </div>
+
+    <div class="grp row2">
+      <div><label>统一压缩开始</label><input type="datetime-local" id="start"></div>
+      <div><label>统一压缩结束</label><input type="datetime-local" id="end"></div>
+    </div>
+    <div class="mini" style="margin-top:-8px;margin-bottom:16px;">默认取各服务器里最早开始 → 最晚结束；如各台时间不同，两份通知统一用这个窗口。</div>
+
+    <div class="grp"><label>通知落款日期</label><input type="date" id="bssdate"></div>
+
+    <div class="grp"><label>Sales 组别 (Teams @提及)</label>
+      <input type="text" id="sales" value="Sales G01 Sales G02 Sales G03 Sales G04 Sales G05 Sales G07"></div>
+
+    <div class="grp"><label>Teams cc 部门</label>
+      <input type="text" id="cc" value="Client Management CN Support CN Trading - Ops"></div>
+  </div>
+
+  <div class="out">
+    <div class="card">
+      <div class="card-head"><span class="t"><span class="badge">TEAMS</span>对销售</span>
+        <button class="copy-btn" data-target="teamsBody">复制</button></div>
+      <pre class="body" id="teamsBody"></pre>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="t"><span class="badge">BSS</span>对客户</span>
+        <button class="copy-btn" data-target="bssBody">复制</button></div>
+      <pre class="body" id="bssBody"></pre>
+    </div>
+  </div>
+</div>
+<div class="foot">解析基于原贴固定字段；每次生成后请对照原贴核对时间与服务器再发出。%name% 为 BSS 客户姓名占位符，勿手动替换。</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).length<2 ? "0"+n : String(n);
+  let servers = []; // {name, cutoff:{y,mo,d}}
+
+  // ---------- 解析 ----------
+  function parseSource(text){
+    const names=[], cutoffs=[], times=[];
+    let m;
+    const serverRe = /受影响服务器[：:]\s*([^\n\r，,]+)/g;
+    const cutoffRe = /压缩订单时间范围[：:]\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
+    const timeRe = /时间[：:]\s*(\d{4})\.(\d{1,2})\.(\d{1,2})\s*[（(][^）)]*[）)]\s*(\d{3,4})\s*\(?\s*UTC\+8\s*\)?\s*至\s*(\d{4})\.(\d{1,2})\.(\d{1,2})\s*[（(][^）)]*[）)]\s*(\d{3,4})/g;
+    while((m=serverRe.exec(text))) names.push(m[1].trim());
+    while((m=cutoffRe.exec(text))) cutoffs.push({y:+m[1],mo:+m[2],d:+m[3]});
+    while((m=timeRe.exec(text))) times.push({
+      s:{y:+m[1],mo:+m[2],d:+m[3],h:Math.floor(+m[4]/100),mi:(+m[4])%100},
+      e:{y:+m[5],mo:+m[6],d:+m[7],h:Math.floor(+m[8]/100),mi:(+m[8])%100}
+    });
+    const out=[]; let plat=null;
+    for(let i=0;i<names.length;i++){
+      const full=names[i];
+      const pm=full.match(/^(MT[45])\s+(.+)$/);
+      if(pm && !plat) plat=pm[1];
+      out.push({name: pm?pm[2].trim():full, cutoff:cutoffs[i]||null, start:times[i]?times[i].s:null, end:times[i]?times[i].e:null});
+    }
+    return {servers:out, platform:plat, times};
+  }
+
+  function toDate(o){return new Date(o.y,o.mo-1,o.d,o.h||0,o.mi||0);}
+  function dtLocal(o){return `${o.y}-${pad(o.mo)}-${pad(o.d)}T${pad(o.h||0)}:${pad(o.mi||0)}`;}
+  function dLocal(o){return `${o.y}-${pad(o.mo)}-${pad(o.d)}`;}
+
+  function doParse(){
+    const {servers:sv, platform, times} = parseSource($("source").value);
+    const msg=$("parseMsg");
+    if(!sv.length){
+      msg.className="parsemsg err";
+      msg.textContent="没识别到服务器。请确认粘贴内容含「受影响服务器：…」这行，或在下方手动添加。";
+      return;
+    }
+    servers = sv.map(s=>({name:s.name, cutoff:s.cutoff}));
+    if(platform) $("platform").value=platform;
+    // 统一窗口：最早开始 → 最晚结束
+    const starts=times.map(t=>t.s), ends=times.map(t=>t.e);
+    if(starts.length){
+      const es=starts.reduce((a,b)=>toDate(a)<=toDate(b)?a:b);
+      const le=ends.reduce((a,b)=>toDate(a)>=toDate(b)?a:b);
+      $("start").value=dtLocal(es); $("end").value=dtLocal(le);
+      const bd=new Date(es.y,es.mo-1,es.d); bd.setDate(bd.getDate()-1);
+      $("bssdate").value=`${bd.getFullYear()}-${pad(bd.getMonth()+1)}-${pad(bd.getDate())}`;
+    }
+    renderSrvRows(); render();
+    const noTime = times.length < servers.length;
+    msg.className="parsemsg ok";
+    msg.textContent=`已解析 ${servers.length} 台服务器${noTime?"（部分时间未识别，请在上方手动补时间）":"，时间与截止日已填入"}。请核对后复制。`;
+  }
+
+  // ---------- 服务器行 ----------
+  function renderSrvRows(){
+    const box=$("srvList"); box.innerHTML="";
+    servers.forEach((s,i)=>{
+      const row=document.createElement("div"); row.className="srv-row";
+      const n=document.createElement("input"); n.type="text"; n.value=s.name; n.placeholder="Live 8";
+      n.oninput=()=>{servers[i].name=n.value; render();};
+      const c=document.createElement("input"); c.type="date";
+      if(s.cutoff) c.value=dLocal(s.cutoff);
+      c.oninput=()=>{const p=c.value.match(/(\d{4})-(\d{2})-(\d{2})/); servers[i].cutoff=p?{y:+p[1],mo:+p[2],d:+p[3]}:null; render();};
+      const d=document.createElement("button"); d.className="del"; d.textContent="×"; d.title="删除";
+      d.onclick=()=>{servers.splice(i,1); renderSrvRows(); render();};
+      row.append(n,c,d); box.appendChild(row);
+    });
+  }
+
+  // ---------- 中文格式 ----------
+  function cnDT(o){return `${o.y} 年 ${o.mo} 月 ${o.d} 日 ${pad(o.h)}:${pad(o.mi)}`;}
+  function cnD(o,padMonth){return `${o.y} 年 ${padMonth?pad(o.mo):o.mo} 月 ${o.d} 日`;}
+  function parseDT(v){const m=v&&v.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);return m?{y:+m[1],mo:+m[2],d:+m[3],h:+m[4],mi:+m[5]}:null;}
+  function parseD(v){const m=v&&v.match(/(\d{4})-(\d{2})-(\d{2})/);return m?{y:+m[1],mo:+m[2],d:+m[3]}:null;}
+
+  // ---------- 生成 ----------
+  function render(){
+    const brand=$("brand").value.trim(), platform=$("platform").value.trim();
+    const sales=$("sales").value.trim(), cc=$("cc").value.trim();
+    const s=parseDT($("start").value), e=parseDT($("end").value), bss=parseD($("bssdate").value);
+    const valid = servers.length && servers.every(x=>x.name && x.cutoff) && s && e && bss;
+    if(!valid){
+      const t="（粘贴原贴并点「解析」，或手动补全服务器 / 截止日 / 时间后自动生成）";
+      $("teamsBody").textContent=t; $("bssBody").textContent=t; return;
+    }
+    const startStr=cnDT(s), endStr=cnDT(e), bssStr=cnD(bss,true);
+    const titleServers=servers.map(x=>x.name).join("、");
+    const bullets=servers.map(x=>
+      `* ${platform} ${x.name} 账户：涉及服务器为 ${platform} ${x.name}，被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`
+    ).join("\n");
+
+    $("teamsBody").textContent =
+`【${brand} ${platform} ${titleServers} 服务器订单数据压缩通知】
+
+各位好 ${sales}，
+
+这次的订单数据压缩将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：
+
+${bullets}
+
+上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。
+
+*本次压缩不接受申请不压缩的账户名单
+
+请知悉，谢谢。
+
+cc: ${cc}`;
+
+    $("bssBody").textContent =
+`尊敬的 %name% ：
+
+您好！${brand} 为了给客户提供更优的交易环境，将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：
+
+${bullets}
+
+
+上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。
+
+如有不便之处，敬请谅解。
+
+如有垂询，请联络1对1专属客户经理。
+
+${brand}
+${bssStr}`;
+  }
+
+  // ---------- 事件 ----------
+  $("parseBtn").onclick=doParse;
+  $("clearBtn").onclick=()=>{$("source").value="";servers=[];renderSrvRows();render();$("parseMsg").className="parsemsg";$("parseMsg").textContent="";};
+  $("addSrv").onclick=()=>{servers.push({name:"",cutoff:null});renderSrvRows();render();};
+  ["brand","platform","start","end","bssdate","sales","cc"].forEach(id=>$(id).addEventListener("input",render));
+
+  document.querySelectorAll(".copy-btn").forEach(btn=>{
+    btn.addEventListener("click",async()=>{
+      const text=$(btn.dataset.target).textContent;
+      try{await navigator.clipboard.writeText(text);}
+      catch(err){const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
+      const old=btn.textContent;btn.textContent="已复制 ✓";btn.classList.add("done");
+      setTimeout(()=>{btn.textContent=old;btn.classList.remove("done");},1600);
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
