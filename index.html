@@ -45,7 +45,10 @@
   .srvhdr{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;font-size:10.5px;color:#9aa3b2;margin-bottom:4px;padding:0 2px;}
   /* output */
   .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden;box-shadow:0 1px 2px rgba(26,34,48,.04);}
-  .card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfd;}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfd;flex-wrap:wrap;}
+  .lang-toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .lang-btn{border:none;background:#fff;color:var(--ink-soft);font-family:var(--sans);font-size:11.5px;font-weight:600;padding:6px 11px;cursor:pointer;}
+  .lang-btn.active{background:var(--accent);color:#fff;}
   .card-head .t{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:9px;}
   .badge{font-size:10.5px;font-weight:700;letter-spacing:.6px;padding:3px 8px;border-radius:5px;background:var(--tag);color:var(--accent);}
   .copy-btn{border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:7px;cursor:pointer;transition:background .15s,transform .05s;white-space:nowrap;}
@@ -53,6 +56,9 @@
   .copy-btn.done{background:#eef7f0;color:#1e7a45;border-color:#bfe3cc;}
   .body{margin:0;padding:16px 18px;font-family:var(--mono);font-size:12.8px;line-height:1.72;white-space:pre-wrap;word-break:break-word;color:#212b3a;}
   .body b{font-weight:700;color:#0d1622;}
+  .titlerow{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfd;}
+  .titlerow-label{font-size:11px;font-weight:600;color:var(--ink-soft);flex:none;}
+  .titlerow-text{flex:1;font-family:var(--mono);font-size:12.8px;color:#212b3a;word-break:break-word;}
   .foot{padding:14px 28px 40px;font-size:11.5px;color:#8a93a3;}
   @media(max-width:880px){.wrap{grid-template-columns:1fr;}.form{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--line);}}
 </style>
@@ -117,7 +123,15 @@
     </div>
     <div class="card">
       <div class="card-head"><span class="t"><span class="badge">BSS</span>对客户</span>
+        <span class="lang-toggle" id="bssLangToggle">
+          <button type="button" class="lang-btn active" data-lang="hans">简体</button><button type="button" class="lang-btn" data-lang="hant">繁體</button>
+        </span>
         <button class="copy-btn" data-target="bssBody">复制</button></div>
+      <div class="titlerow">
+        <span class="titlerow-label">通知标题</span>
+        <div class="titlerow-text" id="bssTitleBody"></div>
+        <button class="copy-btn" data-target="bssTitleBody">复制</button>
+      </div>
       <div class="body" id="bssBody"></div>
     </div>
   </div>
@@ -226,6 +240,7 @@
     return out;
   }
   let outputs = { teamsBody:{plain:"",html:""}, bssBody:{plain:"",html:""} };
+  let bssLang = "hans"; // BSS 输出语言：hans=简体（默认），hant=繁体
 
   function bulletLi(x, platform){
     const label = `${platform} ${x.name} 账户：`;
@@ -273,15 +288,65 @@
         `cc: ${cc}`
       ].join("\n");
     }
+    return buildBssPlain(ctx, bssLang);
+  }
+
+  // ---------- BSS 简繁词典（模板固定文字，人工对照转译） ----------
+  function bssDict(hant){
+    return hant ? {
+      dui:"對", greetIntro:"為了給客戶提供更優的交易環境，將於北京時間",
+      intro2:"以下伺服器所有", intro3:"帳戶", intro4:"進行歷史數據壓縮：",
+      li1:"帳戶", li2:"涉及伺服器為", li3:"被壓縮數據的時間範圍為", li4:"以前的所有交易訂單與資金訂單。",
+      sum1:"上述數據壓縮", sum2:"只影響各伺服器", sum3:"客戶端歷史數據", sum4:"用戶中心",
+      sum5:"將不會受到任何影響", sum6:"，客戶可登入", sum7:"用戶中心查看所有歷史交易訂單數據。",
+      apology:"如有不便之處，敬請諒解。", contact:"如有垂詢，請聯絡1對1專屬客戶經理。"
+    } : {
+      dui:"对", greetIntro:"为了给客户提供更优的交易环境，将于北京时间",
+      intro2:"以下服务器所有", intro3:"账户", intro4:"进行历史数据压缩：",
+      li1:"账户", li2:"涉及服务器为", li3:"被压缩数据的时间范围为", li4:"以前的所有交易订单与资金订单。",
+      sum1:"上述数据压缩", sum2:"只影响各服务器", sum3:"客户端历史数据", sum4:"用户中心",
+      sum5:"将不会受到任何影响", sum6:"，客户可登录", sum7:"用户中心查看所有历史交易订单数据。",
+      apology:"如有不便之处，敬请谅解。", contact:"如有垂询，请联络1对1专属客户经理。"
+    };
+  }
+
+  function buildBssPlain(ctx, lang){
+    const {brand,platform,startStr,endStr,bssStr} = ctx;
+    const hant = lang==="hant"; const t = bssDict(hant);
+    const bulletLines = servers.map(x=>
+      `• ${platform} ${x.name} ${t.li1}：${t.li2} ${platform} ${x.name}，${t.li3} ${cnD(x.cutoff,false)}${t.li4}`
+    );
     return [
       "尊敬的 %name% ：", "",
-      `您好！${brand} 为了给客户提供更优的交易环境，将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：`, "",
+      `您好！${brand} ${t.greetIntro} ${startStr} 至 ${endStr} (GMT +8) ${t.dui}${t.intro2} ${platform} ${t.intro3}${t.intro4}`, "",
       ...bulletLines, "", "",
-      `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`,
-      "如有不便之处，敬请谅解。",
-      "如有垂询，请联络1对1专属客户经理。", "",
+      `${t.sum1}${t.sum2} ${platform} ${t.sum3}，${brand} ${t.sum4}${t.sum5}${t.sum6} ${brand} ${t.sum7}`,
+      t.apology, t.contact, "",
       brand, bssStr
     ].join("\n");
+  }
+
+  function buildBssHtml(ctx, lang){
+    const {brand,platform,startStr,endStr,bssStr} = ctx;
+    const hant = lang==="hant"; const t = bssDict(hant);
+    const R = tx => `<font color="#ff0000"><strong>${esc(tx)}</strong></font>`;
+    const bssBlank = `<p>&nbsp;</p>`;
+    const bssBullets = servers.map(x=>{
+      const label = `${platform} ${x.name} ${t.li1}`;
+      const srv = `${platform} ${x.name}`;
+      const tail = `${t.li3} ${cnD(x.cutoff,false)}${t.li4}`;
+      return `<li><p style="line-height:2;"><strong>${esc(label)}</strong>：${t.li2} ${R(srv)}，<strong>${esc(tail)}</strong></p></li>`;
+    }).join("");
+    return [
+      `<p><strong>尊敬的 %name% ：</strong></p>`, bssBlank,
+      `<p>您好！${R(brand)} ${t.greetIntro} ${R(startStr + " 至 " + endStr + " (GMT +8)")} ${t.dui}<strong>${t.intro2}</strong> ${R(platform + " " + t.intro3)}${t.intro4}<br/><br/></p>`,
+      `<ul>${bssBullets}</ul>`, bssBlank,
+      `<p>${t.sum1}<strong>${t.sum2} ${esc(platform)} ${t.sum3}</strong>，${R(brand + " " + t.sum4)}<strong>${t.sum5}</strong>${t.sum6} ${esc(brand)} ${t.sum7}</p>`, bssBlank,
+      `<p>${esc(t.apology)}</p>`, bssBlank,
+      `<p><strong>${esc(t.contact)}</strong></p>`, bssBlank,
+      `<p>${R(brand + " ")}</p>`,
+      `<p>${esc(bssStr)}</p>`
+    ].join("");
   }
 
   function buildHtml(kind, ctx){
@@ -299,26 +364,7 @@
         `<p>cc: ${ccHtml(cc)}</p>`
       ].join("");
     }
-    // BSS：格式规律与Teams不同——红色(#ff0000)标记品牌/时间/服务器名等关键值，
-    // 其余强调词是黑色加粗；空行用普通 <p>&nbsp;</p>（该系统不会像Teams那样清洗掉）
-    const R = t => `<font color="#ff0000"><strong>${esc(t)}</strong></font>`;
-    const bssBlank = `<p>&nbsp;</p>`;
-    const bssBullets = servers.map(x=>{
-      const label = `${platform} ${x.name} 账户`;
-      const srv = `${platform} ${x.name}`;
-      const tail = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
-      return `<li><p style="line-height:2;"><strong>${esc(label)}</strong>：涉及服务器为 ${R(srv)}，<strong>${esc(tail)}</strong></p></li>`;
-    }).join("");
-    return [
-      `<p><strong>尊敬的 %name% ：</strong></p>`, bssBlank,
-      `<p>您好！${R(brand)} 为了给客户提供更优的交易环境，将于北京时间 ${R(startStr + " 至 " + endStr + " (GMT +8)")} 对<strong>以下服务器所有</strong> ${R(platform + " 账户")}进行历史数据压缩：<br/><br/></p>`,
-      `<ul>${bssBullets}</ul>`, bssBlank,
-      `<p>上述数据压缩<strong>只影响各服务器 ${esc(platform)} 客户端历史数据</strong>，${R(brand + " 用户中心")}<strong>将不会受到任何影响</strong>，客户可登录 ${esc(brand)} 用户中心查看所有历史交易订单数据。</p>`, bssBlank,
-      `<p>如有不便之处，敬请谅解。</p>`, bssBlank,
-      `<p><strong>如有垂询，请联络1对1专属客户经理。</strong></p>`, bssBlank,
-      `<p>${R(brand + " ")}</p>`,
-      `<p>${esc(bssStr)}</p>`
-    ].join("");
+    return buildBssHtml(ctx, bssLang);
   }
 
   function render(){
@@ -328,8 +374,8 @@
     const valid = servers.length && servers.every(x=>x.name && x.cutoff) && s && e && bss;
     if(!valid){
       const t="（粘贴原贴并点「解析」，或手动补全服务器 / 截止日 / 时间后自动生成）";
-      $("teamsBody").textContent=t; $("bssBody").textContent=t;
-      outputs.teamsBody={plain:t,html:t}; outputs.bssBody={plain:t,html:t};
+      $("teamsBody").textContent=t; $("bssBody").textContent=t; $("bssTitleBody").textContent=t;
+      outputs.teamsBody={plain:t,html:t}; outputs.bssBody={plain:t,html:t}; outputs.bssTitleBody={plain:t,html:t};
       return;
     }
     const ctx = { brand, platform, sales, cc,
@@ -343,6 +389,12 @@
       outputs[id] = {plain, html};
       $(id).innerHTML = html;
     });
+
+    // BSS 通知标题（跟随简繁切换，纯文本，无需颜色/加粗）
+    const titleWord = bssLang==="hant" ? "伺服器訂單數據壓縮通知" : "服务器订单数据压缩通知";
+    const bssTitle = `${brand} ${platform} ${ctx.titleServers} ${titleWord}`;
+    outputs.bssTitleBody = {plain: bssTitle, html: bssTitle};
+    $("bssTitleBody").textContent = bssTitle;
   }
 
   // ---------- 事件 ----------
@@ -350,6 +402,14 @@
   $("clearBtn").onclick=()=>{$("source").value="";servers=[];renderSrvRows();render();$("parseMsg").className="parsemsg";$("parseMsg").textContent="";};
   $("addSrv").onclick=()=>{servers.push({name:"",cutoff:null});renderSrvRows();render();};
   ["brand","platform","start","end","bssdate","sales","cc"].forEach(id=>$(id).addEventListener("input",render));
+
+  $("bssLangToggle").querySelectorAll(".lang-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      bssLang = btn.dataset.lang;
+      $("bssLangToggle").querySelectorAll(".lang-btn").forEach(b=>b.classList.toggle("active", b===btn));
+      render();
+    });
+  });
 
   document.querySelectorAll(".copy-btn").forEach(btn=>{
     btn.addEventListener("click",async()=>{
