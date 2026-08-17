@@ -206,42 +206,119 @@
 
   // ---------- 生成（纯文本 + 富文本两套） ----------
   const esc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  function ccHtml(cc){
+    // 已知两个部门/团队标签：Client Management CN（深红加粗）、Support CN Trading - Ops（蓝色不加粗）
+    const known = [
+      { text:"Client Management CN", style:'' },
+      { text:"Support CN Trading - Ops", style:'' }
+    ];
+    let s = String(cc), out = "", i = 0;
+    while(i < s.length){
+      let matched = false;
+      for(const k of known){
+        if(s.startsWith(k.text, i)){
+          out += `<span style="${k.style}">${esc(k.text)}</span>`;
+          i += k.text.length; matched = true; break;
+        }
+      }
+      if(!matched){ out += esc(s[i]); i++; }
+    }
+    return out;
+  }
   let outputs = { teamsBody:{plain:"",html:""}, bssBody:{plain:"",html:""} };
 
-  function bulletLine(x, platform, htmlMode){
+  function bulletLi(x, platform){
     const label = `${platform} ${x.name} 账户：`;
-    const mid   = `涉及服务器为 ${platform} ${x.name}，`;
+    const midPre = `涉及服务器为 `;
+    const srv = `${platform} ${x.name}`;
+    const midAfter = `，`;
     const tail  = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
-    return htmlMode
-      ? `·&nbsp;<b>${esc(label)}</b>${esc(mid)}<b>${esc(tail)}</b>`
-      : `· ${label}${mid}${tail}`;
+    return `<li><b>${esc(label)}</b>${esc(midPre)}<b>${esc(srv)}</b>${esc(midAfter)}<b>${esc(tail)}</b></li>`;
+  }
+  function bulletPlain(x, platform){
+    const label = `${platform} ${x.name} 账户：`;
+    const midPre = `涉及服务器为 `;
+    const srv = `${platform} ${x.name}`;
+    const midAfter = `，`;
+    const tail  = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
+    return `• ${label}${midPre}${srv}${midAfter}${tail}`;
+  }
+  function bulletLiPlain(x, platform){
+    const label = `${platform} ${x.name} 账户：`;
+    const midPre = `涉及服务器为 `;
+    const srv = `${platform} ${x.name}`;
+    const midAfter = `，`;
+    const tail  = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
+    return `<li>${esc(label)}${esc(midPre)}${esc(srv)}${esc(midAfter)}${esc(tail)}</li>`;
+  }
+  function bulletsUl(platform){
+    return `<ul style="margin:2px 0 2px 0;padding-left:22px;">${servers.map(x=>bulletLi(x,platform)).join("")}</ul>`;
+  }
+  function bulletsUlPlain(platform){
+    return `<ul style="margin:2px 0 2px 0;padding-left:22px;">${servers.map(x=>bulletLiPlain(x,platform)).join("")}</ul>`;
   }
 
-  function buildLines(htmlMode, kind, ctx){
+  function buildPlain(kind, ctx){
     const {brand,platform,sales,cc,titleServers,startStr,endStr,bssStr} = ctx;
-    const B = t => htmlMode ? esc(t) : t;
-    const bulletLines = servers.map(x=>bulletLine(x, platform, htmlMode));
+    const bulletLines = servers.map(x=>bulletPlain(x, platform));
     if(kind==="teams"){
       return [
-        `【${B(brand)} ${B(platform)} ${B(titleServers)} 服务器订单数据压缩通知】`, "",
-        `各位好 ${B(sales)}，`, "",
-        `这次的订单数据压缩将于北京时间 ${B(startStr)} 至 ${B(endStr)} (GMT +8) 对以下服务器所有 ${B(platform)} 账户进行历史数据压缩：`, "",
+        `【${brand} ${platform} ${titleServers} 服务器订单数据压缩通知】`, "",
+        `各位好 ${sales}，`, "",
+        `这次的订单数据压缩将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：`, "",
         ...bulletLines, "",
-        `上述数据压缩只影响各服务器 ${B(platform)} 客户端历史数据，${B(brand)} 用户中心将不会受到任何影响，客户可登录 ${B(brand)} 用户中心查看所有历史交易订单数据。`,
+        `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`,
         "*本次压缩不接受申请不压缩的账户名单",
         "请知悉，谢谢。", "",
-        `cc: ${B(cc)}`
-      ];
+        `cc: ${cc}`
+      ].join("\n");
     }
     return [
       "尊敬的 %name% ：", "",
-      `您好！${B(brand)} 为了给客户提供更优的交易环境，将于北京时间 ${B(startStr)} 至 ${B(endStr)} (GMT +8) 对以下服务器所有 ${B(platform)} 账户进行历史数据压缩：`, "",
+      `您好！${brand} 为了给客户提供更优的交易环境，将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：`, "",
       ...bulletLines, "", "",
-      `上述数据压缩只影响各服务器 ${B(platform)} 客户端历史数据，${B(brand)} 用户中心将不会受到任何影响，客户可登录 ${B(brand)} 用户中心查看所有历史交易订单数据。`,
+      `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`,
       "如有不便之处，敬请谅解。",
       "如有垂询，请联络1对1专属客户经理。", "",
-      B(brand), B(bssStr)
-    ];
+      brand, bssStr
+    ].join("\n");
+  }
+
+  function buildHtml(kind, ctx){
+    const {brand,platform,sales,cc,titleServers,startStr,endStr,bssStr} = ctx;
+    const GAP = "margin:0 0 14px 0;"; // 段落自带下边距，代替空行（div会被Teams粘贴清洗掉边距，改用p标签）
+    if(kind==="teams"){
+      return [
+        `<p style="${GAP}"><b>【${esc(brand)} ${esc(platform)} ${esc(titleServers)} 服务器订单数据压缩通知】</b></p>`,
+        `<p style="${GAP}">各位好 ${esc(sales)}，</p>`,
+        `<p style="margin:0 0 6px 0;">这次的订单数据压缩将于北京时间 <b>${esc(startStr)} 至 ${esc(endStr)} (GMT +8)</b> 对以下服务器所有 ${esc(platform)} 账户进行历史数据压缩：</p>`,
+        `<ul style="margin:0 0 14px 0;padding-left:22px;">${servers.map(x=>bulletLi(x,platform)).join("")}</ul>`,
+        `<p style="${GAP}">上述数据压缩只影响各服务器 ${esc(platform)} 客户端历史数据，${esc(brand)} 用户中心将不会受到任何影响，客户可登录 ${esc(brand)} 用户中心查看所有历史交易订单数据。</p>`,
+        `<p style="${GAP}"><span style="font-weight:700;color:#A4262C">*本次压缩不接受申请不压缩的账户名单</span></p>`,
+        `<p style="${GAP}">请知悉，谢谢。</p>`,
+        `<p>cc: ${ccHtml(cc)}</p>`
+      ].join("");
+    }
+    // BSS：格式规律与Teams不同——红色(#ff0000)标记品牌/时间/服务器名等关键值，
+    // 其余强调词是黑色加粗；空行用普通 <p>&nbsp;</p>（该系统不会像Teams那样清洗掉）
+    const R = t => `<font color="#ff0000"><strong>${esc(t)}</strong></font>`;
+    const bssBlank = `<p>&nbsp;</p>`;
+    const bssBullets = servers.map(x=>{
+      const label = `${platform} ${x.name} 账户`;
+      const srv = `${platform} ${x.name}`;
+      const tail = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
+      return `<li><p style="line-height:2;"><strong>${esc(label)}</strong>：涉及服务器为 ${R(srv)}，<strong>${esc(tail)}</strong></p></li>`;
+    }).join("");
+    return [
+      `<p><strong>尊敬的 %name% ：</strong></p>`, bssBlank,
+      `<p>您好！${R(brand)} 为了给客户提供更优的交易环境，将于北京时间 ${R(startStr + " 至 " + endStr + " (GMT +8)")} 对<strong>以下服务器所有</strong> ${R(platform + " 账户")}进行历史数据压缩：<br/><br/></p>`,
+      `<ul>${bssBullets}</ul>`, bssBlank,
+      `<p>上述数据压缩<strong>只影响各服务器 ${esc(platform)} 客户端历史数据</strong>，${R(brand + " 用户中心")}<strong>将不会受到任何影响</strong>，客户可登录 ${esc(brand)} 用户中心查看所有历史交易订单数据。</p>`, bssBlank,
+      `<p>如有不便之处，敬请谅解。</p>`, bssBlank,
+      `<p><strong>如有垂询，请联络1对1专属客户经理。</strong></p>`, bssBlank,
+      `<p>${R(brand + " ")}</p>`,
+      `<p>${esc(bssStr)}</p>`
+    ].join("");
   }
 
   function render(){
@@ -261,8 +338,8 @@
 
     ["teams","bss"].forEach(kind=>{
       const id = kind==="teams" ? "teamsBody" : "bssBody";
-      const plain = buildLines(false, kind, ctx).join("\n");
-      const html  = buildLines(true, kind, ctx).join("<br>");
+      const plain = buildPlain(kind, ctx);
+      const html  = buildHtml(kind, ctx);
       outputs[id] = {plain, html};
       $(id).innerHTML = html;
     });
