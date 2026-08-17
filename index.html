@@ -51,7 +51,8 @@
   .copy-btn{border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:7px;cursor:pointer;transition:background .15s,transform .05s;white-space:nowrap;}
   .copy-btn:hover{background:var(--accent-press);} .copy-btn:active{transform:translateY(1px);}
   .copy-btn.done{background:#eef7f0;color:#1e7a45;border-color:#bfe3cc;}
-  pre.body{margin:0;padding:16px 18px;font-family:var(--mono);font-size:12.8px;line-height:1.72;white-space:pre-wrap;word-break:break-word;color:#212b3a;}
+  .body{margin:0;padding:16px 18px;font-family:var(--mono);font-size:12.8px;line-height:1.72;white-space:pre-wrap;word-break:break-word;color:#212b3a;}
+  .body b{font-weight:700;color:#0d1622;}
   .foot{padding:14px 28px 40px;font-size:11.5px;color:#8a93a3;}
   @media(max-width:880px){.wrap{grid-template-columns:1fr;}.form{position:static;max-height:none;border-right:none;border-bottom:1px solid var(--line);}}
 </style>
@@ -112,12 +113,12 @@
     <div class="card">
       <div class="card-head"><span class="t"><span class="badge">TEAMS</span>对销售</span>
         <button class="copy-btn" data-target="teamsBody">复制</button></div>
-      <pre class="body" id="teamsBody"></pre>
+      <div class="body" id="teamsBody"></div>
     </div>
     <div class="card">
       <div class="card-head"><span class="t"><span class="badge">BSS</span>对客户</span>
         <button class="copy-btn" data-target="bssBody">复制</button></div>
-      <pre class="body" id="bssBody"></pre>
+      <div class="body" id="bssBody"></div>
     </div>
   </div>
 </div>
@@ -203,7 +204,46 @@
   function parseDT(v){const m=v&&v.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);return m?{y:+m[1],mo:+m[2],d:+m[3],h:+m[4],mi:+m[5]}:null;}
   function parseD(v){const m=v&&v.match(/(\d{4})-(\d{2})-(\d{2})/);return m?{y:+m[1],mo:+m[2],d:+m[3]}:null;}
 
-  // ---------- 生成 ----------
+  // ---------- 生成（纯文本 + 富文本两套） ----------
+  const esc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  let outputs = { teamsBody:{plain:"",html:""}, bssBody:{plain:"",html:""} };
+
+  function bulletLine(x, platform, htmlMode){
+    const label = `${platform} ${x.name} 账户：`;
+    const mid   = `涉及服务器为 ${platform} ${x.name}，`;
+    const tail  = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
+    return htmlMode
+      ? `·&nbsp;<b>${esc(label)}</b>${esc(mid)}<b>${esc(tail)}</b>`
+      : `· ${label}${mid}${tail}`;
+  }
+
+  function buildLines(htmlMode, kind, ctx){
+    const {brand,platform,sales,cc,titleServers,startStr,endStr,bssStr} = ctx;
+    const B = t => htmlMode ? esc(t) : t;
+    const bulletLines = servers.map(x=>bulletLine(x, platform, htmlMode));
+    if(kind==="teams"){
+      return [
+        `【${B(brand)} ${B(platform)} ${B(titleServers)} 服务器订单数据压缩通知】`, "",
+        `各位好 ${B(sales)}，`, "",
+        `这次的订单数据压缩将于北京时间 ${B(startStr)} 至 ${B(endStr)} (GMT +8) 对以下服务器所有 ${B(platform)} 账户进行历史数据压缩：`, "",
+        ...bulletLines, "",
+        `上述数据压缩只影响各服务器 ${B(platform)} 客户端历史数据，${B(brand)} 用户中心将不会受到任何影响，客户可登录 ${B(brand)} 用户中心查看所有历史交易订单数据。`,
+        "*本次压缩不接受申请不压缩的账户名单",
+        "请知悉，谢谢。", "",
+        `cc: ${B(cc)}`
+      ];
+    }
+    return [
+      "尊敬的 %name% ：", "",
+      `您好！${B(brand)} 为了给客户提供更优的交易环境，将于北京时间 ${B(startStr)} 至 ${B(endStr)} (GMT +8) 对以下服务器所有 ${B(platform)} 账户进行历史数据压缩：`, "",
+      ...bulletLines, "", "",
+      `上述数据压缩只影响各服务器 ${B(platform)} 客户端历史数据，${B(brand)} 用户中心将不会受到任何影响，客户可登录 ${B(brand)} 用户中心查看所有历史交易订单数据。`,
+      "如有不便之处，敬请谅解。",
+      "如有垂询，请联络1对1专属客户经理。", "",
+      B(brand), B(bssStr)
+    ];
+  }
+
   function render(){
     const brand=$("brand").value.trim(), platform=$("platform").value.trim();
     const sales=$("sales").value.trim(), cc=$("cc").value.trim();
@@ -211,47 +251,21 @@
     const valid = servers.length && servers.every(x=>x.name && x.cutoff) && s && e && bss;
     if(!valid){
       const t="（粘贴原贴并点「解析」，或手动补全服务器 / 截止日 / 时间后自动生成）";
-      $("teamsBody").textContent=t; $("bssBody").textContent=t; return;
+      $("teamsBody").textContent=t; $("bssBody").textContent=t;
+      outputs.teamsBody={plain:t,html:t}; outputs.bssBody={plain:t,html:t};
+      return;
     }
-    const startStr=cnDT(s), endStr=cnDT(e), bssStr=cnD(bss,true);
-    const titleServers=servers.map(x=>x.name).join("、");
-    const bullets=servers.map(x=>
-      `* ${platform} ${x.name} 账户：涉及服务器为 ${platform} ${x.name}，被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`
-    ).join("\n");
+    const ctx = { brand, platform, sales, cc,
+      titleServers: servers.map(x=>x.name).join("、"),
+      startStr: cnDT(s), endStr: cnDT(e), bssStr: cnD(bss,true) };
 
-    $("teamsBody").textContent =
-`【${brand} ${platform} ${titleServers} 服务器订单数据压缩通知】
-
-各位好 ${sales}，
-
-这次的订单数据压缩将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：
-
-${bullets}
-
-上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。
-
-*本次压缩不接受申请不压缩的账户名单
-
-请知悉，谢谢。
-
-cc: ${cc}`;
-
-    $("bssBody").textContent =
-`尊敬的 %name% ：
-
-您好！${brand} 为了给客户提供更优的交易环境，将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：
-
-${bullets}
-
-
-上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。
-
-如有不便之处，敬请谅解。
-
-如有垂询，请联络1对1专属客户经理。
-
-${brand}
-${bssStr}`;
+    ["teams","bss"].forEach(kind=>{
+      const id = kind==="teams" ? "teamsBody" : "bssBody";
+      const plain = buildLines(false, kind, ctx).join("\n");
+      const html  = buildLines(true, kind, ctx).join("<br>");
+      outputs[id] = {plain, html};
+      $(id).innerHTML = html;
+    });
   }
 
   // ---------- 事件 ----------
@@ -262,9 +276,25 @@ ${bssStr}`;
 
   document.querySelectorAll(".copy-btn").forEach(btn=>{
     btn.addEventListener("click",async()=>{
-      const text=$(btn.dataset.target).textContent;
-      try{await navigator.clipboard.writeText(text);}
-      catch(err){const ta=document.createElement("textarea");ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
+      const o = outputs[btn.dataset.target] || {plain:"",html:""};
+      let ok=false;
+      try{
+        if(window.ClipboardItem){
+          const item = new ClipboardItem({
+            "text/html": new Blob([o.html], {type:"text/html"}),
+            "text/plain": new Blob([o.plain], {type:"text/plain"})
+          });
+          await navigator.clipboard.write([item]);
+          ok=true;
+        }
+      }catch(err){ /* 回退到纯文本 */ }
+      if(!ok){
+        try{ await navigator.clipboard.writeText(o.plain); }
+        catch(err){
+          const ta=document.createElement("textarea");ta.value=o.plain;document.body.appendChild(ta);ta.select();
+          document.execCommand("copy");document.body.removeChild(ta);
+        }
+      }
       const old=btn.textContent;btn.textContent="已复制 ✓";btn.classList.add("done");
       setTimeout(()=>{btn.textContent=old;btn.classList.remove("done");},1600);
     });
