@@ -39,7 +39,12 @@
   .parsemsg{font-size:12px;margin-top:8px;padding:8px 10px;border-radius:6px;display:none;}
   .parsemsg.ok{display:block;background:var(--tag);color:var(--accent);}
   .parsemsg.err{display:block;background:var(--warn-bg);color:var(--warn);}
-  .srv-row{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;align-items:center;margin-bottom:8px;}
+  .srv-wrap{margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed var(--line);}
+  .srv-row{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;align-items:center;margin-bottom:6px;}
+  .srv-opt{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-left:2px;}
+  .srv-opt label{font-size:11.5px;color:var(--ink-soft);cursor:pointer;}
+  .srv-opt input[type=checkbox]{cursor:pointer;}
+  .srv-opt .grp-in{flex:1;min-width:150px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:var(--field);}
   .srv-row .del{border:1px solid var(--line);background:#fff;color:#b0424c;border-radius:6px;cursor:pointer;font-size:15px;line-height:1;padding:7px 0;}
   .srv-row .del:hover{background:#fbeef0;}
   .srvhdr{display:grid;grid-template-columns:1fr 138px 30px;gap:8px;font-size:10.5px;color:#9aa3b2;margin-bottom:4px;padding:0 2px;}
@@ -154,7 +159,9 @@
     const serverRe = /受影响服务器[：:]\s*([^\n\r，,]+)/g;
     const cutoffRe = /压缩订单时间范围[：:]\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
     const timeRe = /时间[：:]\s*(\d{4})\.(\d{1,2})\.(\d{1,2})\s*[（(][^）)]*[）)]\s*(\d{3,4})\s*\(?\s*UTC\+8\s*\)?\s*至\s*(\d{4})\.(\d{1,2})\.(\d{1,2})\s*[（(][^）)]*[）)]\s*(\d{3,4})/g;
-    while((m=serverRe.exec(text))) names.push(m[1].trim());
+    // 记录每个"受影响服务器"锚点的位置，用于切段判断"是否接受不压缩名单"
+    const anchorIdx=[];
+    while((m=serverRe.exec(text))){ names.push(m[1].trim()); anchorIdx.push(m.index); }
     while((m=cutoffRe.exec(text))) cutoffs.push({y:+m[1],mo:+m[2],d:+m[3]});
     while((m=timeRe.exec(text))) times.push({
       s:{y:+m[1],mo:+m[2],d:+m[3],h:Math.floor(+m[4]/100),mi:(+m[4])%100},
@@ -165,7 +172,18 @@
       const full=names[i];
       const pm=full.match(/^(MT[45])\s+(.+)$/);
       if(pm && !plat) plat=pm[1];
-      out.push({name: pm?pm[2].trim():full, cutoff:cutoffs[i]||null, start:times[i]?times[i].s:null, end:times[i]?times[i].e:null});
+      // 该服务器所属段落：从本锚点到下一锚点之间的文字
+      const segStart=anchorIdx[i];
+      const segEnd=(i+1<anchorIdx.length)?anchorIdx[i+1]:text.length;
+      const seg=text.slice(segStart, segEnd);
+      // 判断是否"接受"不压缩名单：出现"只接受…不压缩"算接受；"不接受…不压缩"算不接受
+      let accept=false, group="";
+      if(/只接受[^。\n]*不压缩/.test(seg)){
+        accept=true;
+        const gm=seg.match(/只接受\s*(?:申请)?\s*([\u4e00-\u9fa5A-Za-z]+组别)/);
+        if(gm) group=gm[1]; // 如"美元组别"
+      }
+      out.push({name: pm?pm[2].trim():full, cutoff:cutoffs[i]||null, start:times[i]?times[i].s:null, end:times[i]?times[i].e:null, accept, group});
     }
     return {servers:out, platform:plat, times};
   }
@@ -182,7 +200,7 @@
       msg.textContent="没识别到服务器。请确认粘贴内容含「受影响服务器：…」这行，或在下方手动添加。";
       return;
     }
-    servers = sv.map(s=>({name:s.name, cutoff:s.cutoff}));
+    servers = sv.map(s=>({name:s.name, cutoff:s.cutoff, accept:!!s.accept, group:s.group||""}));
     if(platform) $("platform").value=platform;
     // 统一窗口：最早开始 → 最晚结束
     const starts=times.map(t=>t.s), ends=times.map(t=>t.e);
@@ -203,6 +221,7 @@
   function renderSrvRows(){
     const box=$("srvList"); box.innerHTML="";
     servers.forEach((s,i)=>{
+      const wrap=document.createElement("div"); wrap.className="srv-wrap";
       const row=document.createElement("div"); row.className="srv-row";
       const n=document.createElement("input"); n.type="text"; n.value=s.name; n.placeholder="Live 8";
       n.oninput=()=>{servers[i].name=n.value; render();};
@@ -211,7 +230,19 @@
       c.oninput=()=>{const p=c.value.match(/(\d{4})-(\d{2})-(\d{2})/); servers[i].cutoff=p?{y:+p[1],mo:+p[2],d:+p[3]}:null; render();};
       const d=document.createElement("button"); d.className="del"; d.textContent="×"; d.title="删除";
       d.onclick=()=>{servers.splice(i,1); renderSrvRows(); render();};
-      row.append(n,c,d); box.appendChild(row);
+      row.append(n,c,d);
+
+      // 第二行：接受不压缩名单
+      const opt=document.createElement("div"); opt.className="srv-opt";
+      const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!s.accept; cb.id="acc"+i;
+      const lb=document.createElement("label"); lb.htmlFor="acc"+i; lb.textContent="接受不压缩名单";
+      const grp=document.createElement("input"); grp.type="text"; grp.className="grp-in"; grp.placeholder="限定组别(如 美元组别，可留空)"; grp.value=s.group||"";
+      grp.style.display = s.accept ? "" : "none";
+      cb.onchange=()=>{servers[i].accept=cb.checked; grp.style.display=cb.checked?"":"none"; render();};
+      grp.oninput=()=>{servers[i].group=grp.value; render();};
+      opt.append(cb,lb,grp);
+
+      wrap.append(row,opt); box.appendChild(wrap);
     });
   }
 
@@ -244,6 +275,17 @@
   }
   let outputs = { teamsBody:{plain:"",html:""}, bssBody:{plain:"",html:""} };
   let bssLang = "hans"; // BSS 输出语言：hans=简体（默认），hant=繁体
+
+  // 警示语：只要有服务器"接受不压缩名单"，就合并列出那几台；否则用默认"不接受"文案
+  function warnLine(platform){
+    const acc = servers.filter(s=>s.accept && s.name);
+    if(!acc.length) return "*本次压缩不接受申请不压缩的账户名单";
+    const srvNames = acc.map(s=>`${platform} ${s.name}`).join("、");
+    // 组别限定：取接受服务器里出现的组别（若一致则用其一）
+    const groups = [...new Set(acc.map(s=>(s.group||"").trim()).filter(Boolean))];
+    const groupTxt = groups.length ? `${groups.join("、")}客户` : "";
+    return `*本次压缩只接受 ${srvNames} 申请${groupTxt}的不压缩的账户名单`;
+  }
 
   function bulletLi(x, platform){
     const label = `${platform} ${x.name} 账户：`;
@@ -286,7 +328,7 @@
         `这次的订单数据压缩将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：`, "",
         ...bulletLines, "",
         `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`,
-        "*本次压缩不接受申请不压缩的账户名单",
+        warnLine(platform),
         "请知悉，谢谢。", "",
         `cc: ${cc}`
       ].join("\n");
@@ -362,7 +404,7 @@
         `<p style="margin:0 0 6px 0;">这次的订单数据压缩将于北京时间 <b>${esc(startStr)} 至 ${esc(endStr)} (GMT +8)</b> 对以下服务器所有 ${esc(platform)} 账户进行历史数据压缩：</p>`,
         `<ul style="margin:0 0 14px 0;padding-left:22px;">${servers.map(x=>bulletLi(x,platform)).join("")}</ul>`,
         `<p style="${GAP}">上述数据压缩只影响各服务器 ${esc(platform)} 客户端历史数据，${esc(brand)} 用户中心将不会受到任何影响，客户可登录 ${esc(brand)} 用户中心查看所有历史交易订单数据。</p>`,
-        `<p style="${GAP}"><span style="font-weight:700;color:#A4262C">*本次压缩不接受申请不压缩的账户名单</span></p>`,
+        `<p style="${GAP}"><span style="font-weight:700;color:#A4262C">${esc(warnLine(platform))}</span></p>`,
         `<p style="${GAP}">请知悉，谢谢。</p>`,
         `<p>cc: ${ccHtml(cc)}</p>`
       ].join("");
