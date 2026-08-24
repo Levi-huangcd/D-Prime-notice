@@ -255,7 +255,6 @@
   // ---------- 生成（纯文本 + 富文本两套） ----------
   const esc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   function ccHtml(cc){
-    // 已知两个部门/团队标签：Client Management CN（深红加粗）、Support CN Trading - Ops（蓝色不加粗）
     const known = [
       { text:"Client Management CN", style:'' },
       { text:"Support CN Trading - Ops", style:'' }
@@ -274,14 +273,13 @@
     return out;
   }
   let outputs = { teamsBody:{plain:"",html:""}, bssBody:{plain:"",html:""} };
-  let bssLang = "hans"; // BSS 输出语言：hans=简体（默认），hant=繁体
+  let bssLang = "hans";
 
   // 警示语：只要有服务器"接受不压缩名单"，就合并列出那几台；否则用默认"不接受"文案
   function warnLine(platform){
     const acc = servers.filter(s=>s.accept && s.name);
     if(!acc.length) return "*本次压缩不接受申请不压缩的账户名单";
     const srvNames = acc.map(s=>`${platform} ${s.name}`).join("、");
-    // 组别限定：取接受服务器里出现的组别（若一致则用其一）
     const groups = [...new Set(acc.map(s=>(s.group||"").trim()).filter(Boolean))];
     const groupTxt = groups.length ? `${groups.join("、")}客户` : "";
     return `*本次压缩只接受 ${srvNames} 申请${groupTxt}的不压缩的账户名单`;
@@ -311,12 +309,6 @@
     const tail  = `被压缩数据的时间范围为 ${cnD(x.cutoff,false)}以前的所有交易订单与资金订单。`;
     return `<li>${esc(label)}${esc(midPre)}${esc(srv)}${esc(midAfter)}${esc(tail)}</li>`;
   }
-  function bulletsUl(platform){
-    return `<ul style="margin:2px 0 2px 0;padding-left:22px;">${servers.map(x=>bulletLi(x,platform)).join("")}</ul>`;
-  }
-  function bulletsUlPlain(platform){
-    return `<ul style="margin:2px 0 2px 0;padding-left:22px;">${servers.map(x=>bulletLiPlain(x,platform)).join("")}</ul>`;
-  }
 
   function buildPlain(kind, ctx){
     const {brand,platform,sales,cc,titleServers,startStr,endStr,bssStr} = ctx;
@@ -327,8 +319,8 @@
         `各位好 ${sales}，`, "",
         `这次的订单数据压缩将于北京时间 ${startStr} 至 ${endStr} (GMT +8) 对以下服务器所有 ${platform} 账户进行历史数据压缩：`, "",
         ...bulletLines, "",
-        `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`,
-        warnLine(platform),
+        `上述数据压缩只影响各服务器 ${platform} 客户端历史数据，${brand} 用户中心将不会受到任何影响，客户可登录 ${brand} 用户中心查看所有历史交易订单数据。`, "",
+        warnLine(platform), "",
         "请知悉，谢谢。", "",
         `cc: ${cc}`
       ].join("\n");
@@ -336,7 +328,7 @@
     return buildBssPlain(ctx, bssLang);
   }
 
-  // ---------- BSS 简繁词典（模板固定文字，人工对照转译） ----------
+  // ---------- BSS 简繁词典 ----------
   function bssDict(hant){
     return hant ? {
       dui:"對", greetIntro:"為了給客戶提供更優的交易環境，將於北京時間",
@@ -396,14 +388,14 @@
 
   function buildHtml(kind, ctx){
     const {brand,platform,sales,cc,titleServers,startStr,endStr,bssStr} = ctx;
-    const GAP = "margin:0 0 14px 0;"; // 段落自带下边距，代替空行（div会被Teams粘贴清洗掉边距，改用p标签）
+    const GAP = "margin:0 0 14px 0;";
     if(kind==="teams"){
       return [
         `<p style="${GAP}"><b>【${esc(brand)} ${esc(platform)} ${esc(titleServers)} 服务器订单数据压缩通知】</b></p>`,
         `<p style="${GAP}">各位好 ${esc(sales)}，</p>`,
         `<p style="margin:0 0 6px 0;">这次的订单数据压缩将于北京时间 <b>${esc(startStr)} 至 ${esc(endStr)} (GMT +8)</b> 对以下服务器所有 ${esc(platform)} 账户进行历史数据压缩：</p>`,
         `<ul style="margin:0 0 14px 0;padding-left:22px;">${servers.map(x=>bulletLi(x,platform)).join("")}</ul>`,
-        `<p style="${GAP}">上述数据压缩只影响各服务器 ${esc(platform)} 客户端历史数据，${esc(brand)} 用户中心将不会受到任何影响，客户可登录 ${esc(brand)} 用户中心查看所有历史交易订单数据。</p>`,
+        `<p style="${GAP}">上述数据压缩<b>只影响各服务器 ${esc(platform)} 客户端历史数据</b>，<b>${esc(brand)} 用户中心将不会受到任何影响</b>，客户可登录 <b>${esc(brand)}</b> 用户中心查看所有历史交易订单数据。</p>`,
         `<p style="${GAP}"><span style="font-weight:700;color:#A4262C">${esc(warnLine(platform))}</span></p>`,
         `<p style="${GAP}">请知悉，谢谢。</p>`,
         `<p>cc: ${ccHtml(cc)}</p>`
@@ -435,7 +427,6 @@
       $(id).innerHTML = html;
     });
 
-    // BSS 通知标题（跟随简繁切换，纯文本，无需颜色/加粗）
     const titleWord = bssLang==="hant" ? "伺服器訂單數據壓縮通知" : "服务器订单数据压缩通知";
     const bssTitle = `${brand} ${platform} ${ctx.titleServers} ${titleWord}`;
     outputs.bssTitleBody = {plain: bssTitle, html: bssTitle};
@@ -469,7 +460,7 @@
           await navigator.clipboard.write([item]);
           ok=true;
         }
-      }catch(err){ /* 回退到纯文本 */ }
+      }catch(err){ }
       if(!ok){
         try{ await navigator.clipboard.writeText(o.plain); }
         catch(err){
